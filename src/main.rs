@@ -1,4 +1,4 @@
-use std::{fs::OpenOptions, io::Write, path::Path};
+use std::{fs::OpenOptions, io::Write, mem::Discriminant, path::Path};
 
 // Canvas has origin at the center, with positive x to the right and positive y up
 const CANVAS_WIDTH: usize = 700;
@@ -46,14 +46,41 @@ struct Vector3D {
     z: f32,
 }
 
+fn dot(lhs: Vector3D, rhs: Vector3D) -> f32 {
+    lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z
+}
+
+struct Viewport {
+    width: usize,
+    height: usize,
+    center: Point3D,
+}
+
+impl Viewport {
+    fn map_points<F>(&self, mut f: F)
+    where
+        F: FnMut(Point3D),
+    {
+        for w_y in -(self.height as i32 / 2)..self.height as i32 / 2 {
+            for w_x in -(self.width as i32 / 2)..self.width as i32 / 2 {
+                f(Point3D {
+                    x: self.center.x + w_x as f32,
+                    y: self.center.y + w_y as f32,
+                    z: self.center.z,
+                })
+            }
+        }
+    }
+}
+
 // TODO: t_min and t_max?
 struct Ray {
-    point: Point3D,
+    origin: Point3D,
     dir: Vector3D,
 }
 
 struct Camera {
-    point: Point3D,
+    origin: Point3D,
     dir: Vector3D,
 }
 
@@ -70,48 +97,61 @@ struct Sphere {
     color: Color,
 }
 
-struct Time {
-    t: f32,
-}
-
-enum Intersection {
-    None,
-    One(Time),
-    Two((Time, Time)),
-}
-
-fn sphere_ray_intersection(sphere: &Sphere, ray: &Ray) -> Intersection {
-    // TODO: Hook this up
-    Intersection::None
-}
-
-fn get_color(viewport_x: i32, viewport_y: i32, _scene: &[Sphere]) -> Color {
-    let mut color = Color {
-        red: 0,
-        green: 0,
-        blue: 0,
+fn sphere_ray_intersection(sphere: &Sphere, ray: &Ray) -> Option<(f32, f32)> {
+    let co = Vector3D {
+        x: ray.origin.x - sphere.center.x,
+        y: ray.origin.y - sphere.center.y,
+        z: ray.origin.z - sphere.center.z,
     };
-    if viewport_x % 100 < 50 {
-        color.red += 127;
-        color.green += 127;
-        color.blue += 127;
+
+    let a = dot(ray.dir, ray.dir);
+    let b = 2.0 * dot(ray.dir, co);
+    let c = dot(co, co) - sphere.radius * sphere.radius;
+
+    let discriminant = b * b - 4.0 * a * c;
+
+    if discriminant < 0.0 {
+        None
+    } else {
+        let discriminant_root = discriminant.sqrt();
+        let t0 = (-b - discriminant_root) / (2.0 * a);
+        let t1 = (-b + discriminant_root) / (2.0 * a);
+        Some((t0, t1))
     }
-    if viewport_y % 100 < 50 {
-        color.red += 127;
-        color.green += 127;
-        color.blue += 127;
+}
+
+fn trace_ray(ray: Ray, scene: &[Sphere]) -> Color {
+    let background_color = Color {
+        red: 175,
+        green: 175,
+        blue: 175,
+    };
+    let mut closest_t = None;
+    let mut closest_sphere = None;
+    for sphere in scene {
+        let intersection = sphere_ray_intersection(sphere, &ray);
+        match intersection {
+            Some((t0, t1)) => {
+                let min_time = t0.min(t1);
+                if closest_t.is_none() || min_time < closest_t.unwrap() {
+                    closest_t = Some(min_time);
+                    closest_sphere = Some(sphere);
+                }
+            }
+            None => {}
+        };
     }
-    color
+    closest_sphere.map_or(background_color, |sphere| sphere.color)
 }
 
 struct Canvas<const W: usize, const H: usize> {
-    colors: [[Color; W]; H],
+    colors: Vec<Vec<Color>>,
 }
 
 impl<const W: usize, const H: usize> Canvas<W, H> {
     fn new() -> Self {
         Self {
-            colors: [[Color::default(); W]; H],
+            colors: vec![vec![Color::default(); W]; H],
         }
     }
 
@@ -146,12 +186,21 @@ impl<const W: usize, const H: usize> Canvas<W, H> {
 
 fn main() {
     let camera = Camera {
-        point: Point3D {
+        origin: Point3D {
             x: 0.0,
             y: 0.0,
             z: 0.0,
         },
         dir: Vector3D {
+            x: 0.0,
+            y: 0.0,
+            z: 1.0,
+        },
+    };
+    let viewport = Viewport {
+        width: VIEWPORT_WIDTH,
+        height: VIEWPORT_HEIGHT,
+        center: Point3D {
             x: 0.0,
             y: 0.0,
             z: 1.0,
@@ -200,12 +249,33 @@ fn main() {
     ];
 
     let mut canvas = Canvas::<CANVAS_WIDTH, CANVAS_HEIGHT>::new();
-
+    viewport.map_points(|point| {
+        let ray = Ray {
+            origin: camera.origin,
+            dir: Vector3D {
+                x: point.x as f32,
+                y: point.y as f32,
+                z: point.z as f32,
+            },
+        };
+        let color = trace_ray(ray, &scene);
+        canvas.put_color(point.x as i32, point.y as i32, color);
+    });
+    /*
     for v_y in -(VIEWPORT_HEIGHT as i32 / 2)..VIEWPORT_HEIGHT as i32 / 2 {
         for v_x in -(VIEWPORT_WIDTH as i32 / 2)..VIEWPORT_WIDTH as i32 / 2 {
-            let color = get_color(v_x, v_y, &scene);
+            let ray = Ray {
+                origin: camera.origin,
+                dir: Vector3D {
+                    x: v_x as f32,
+                    y: v_y as f32,
+                    z: viewport.center.z,
+                },
+            };
+            let color = trace_ray(ray, &scene);
             canvas.put_color(v_x, v_y, color);
         }
     }
+    */
     canvas.write_to_file("output.ppm");
 }
