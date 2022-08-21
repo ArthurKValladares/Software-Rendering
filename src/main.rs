@@ -261,21 +261,6 @@ fn main() {
         let color = trace_ray(ray, &scene);
         canvas.put_color(point.x as i32, point.y as i32, color);
     });
-    /*
-    for v_y in -(VIEWPORT_HEIGHT as i32 / 2)..VIEWPORT_HEIGHT as i32 / 2 {
-        for v_x in -(VIEWPORT_WIDTH as i32 / 2)..VIEWPORT_WIDTH as i32 / 2 {
-            let ray = Ray {
-                origin: camera.origin,
-                dir: Vector3D {
-                    x: v_x as f32,
-                    y: v_y as f32,
-                    z: viewport.center.z,
-                },
-            };
-            let color = trace_ray(ray, &scene);
-            canvas.put_color(v_x, v_y, color);
-        }
-    }
-    */
+
     canvas.write_to_file("output.ppm");
 }
