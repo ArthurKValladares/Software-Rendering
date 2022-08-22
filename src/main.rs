@@ -1,43 +1,7 @@
 use std::{fs::OpenOptions, io::Write, mem::Discriminant, path::Path};
 
-// Canvas has origin at the center, with positive x to the right and positive y up
-const CANVAS_WIDTH: usize = 700;
-const CANVAS_HEIGHT: usize = 700;
-
-// Viewport had origin on the top-left, with potiive x to the right and positive y down
-const VIEWPORT_WIDTH: usize = 700;
-const VIEWPORT_HEIGHT: usize = 700;
-
-fn viewport_to_canvas(x: i32, y: i32) -> Option<(usize, usize)> {
-    let canvas_width_scale = CANVAS_WIDTH as f32 / VIEWPORT_WIDTH as f32;
-    let canvas_height_scale = CANVAS_HEIGHT as f32 / VIEWPORT_HEIGHT as f32;
-    let canvas_point_x = (x as f32 + VIEWPORT_WIDTH as f32 / 2.0) * canvas_width_scale;
-    let canvas_point_y = (CANVAS_HEIGHT - 1) as f32
-        - (y as f32 + VIEWPORT_HEIGHT as f32 / 2.0) * canvas_height_scale;
-    if canvas_point_x >= 0.0
-        && canvas_point_x <= CANVAS_WIDTH as f32
-        && canvas_point_y >= 0.0
-        && canvas_point_y <= CANVAS_HEIGHT as f32
-    {
-        Some((
-            canvas_point_x.round() as usize,
-            canvas_point_y.round() as usize,
-        ))
-    } else {
-        print!(
-            "invalid point: V[{},{}], C[{},{}]",
-            x, y, canvas_point_x, canvas_point_y
-        );
-        None
-    }
-}
-
-#[derive(Default, Debug, Clone, Copy)]
-struct Point3D {
-    x: f32,
-    y: f32,
-    z: f32,
-}
+const SCREEN_WIDTH: usize = 700;
+const SCREEN_HEIGHT: usize = 700;
 
 #[derive(Default, Debug, Clone, Copy)]
 struct Vector3D {
@@ -51,36 +15,19 @@ fn dot(lhs: Vector3D, rhs: Vector3D) -> f32 {
 }
 
 struct Viewport {
-    width: usize,
-    height: usize,
-    center: Point3D,
-}
-
-impl Viewport {
-    fn map_points<F>(&self, mut f: F)
-    where
-        F: FnMut(Point3D),
-    {
-        for w_y in -(self.height as i32 / 2)..self.height as i32 / 2 {
-            for w_x in -(self.width as i32 / 2)..self.width as i32 / 2 {
-                f(Point3D {
-                    x: self.center.x + w_x as f32,
-                    y: self.center.y + w_y as f32,
-                    z: self.center.z,
-                })
-            }
-        }
-    }
+    width: f32,
+    height: f32,
+    center: Vector3D,
 }
 
 // TODO: t_min and t_max?
 struct Ray {
-    origin: Point3D,
+    origin: Vector3D,
     dir: Vector3D,
 }
 
 struct Camera {
-    origin: Point3D,
+    origin: Vector3D,
     dir: Vector3D,
 }
 
@@ -92,7 +39,7 @@ struct Color {
 }
 
 struct Sphere {
-    center: Point3D,
+    center: Vector3D,
     radius: f32,
     color: Color,
 }
@@ -155,14 +102,26 @@ impl<const W: usize, const H: usize> Canvas<W, H> {
         }
     }
 
-    pub fn put_color(&mut self, row: i32, col: i32, color: Color) {
-        let (c_row, c_col) = viewport_to_canvas(row, col).unwrap_or_else(|| {
-            panic!(
-                "Attempted to sample point outside of canvas range. Canvas[{}, {}] Point[{},{}]",
-                W, H, row, col
-            )
-        });
-        self.colors[c_row][c_col] = color;
+    pub fn put_color(&mut self, row: usize, col: usize, color: Color) {
+        self.colors[row][col] = color;
+    }
+
+    fn map_pixels<F>(&mut self, viewport: &Viewport, mut f: F)
+    where
+        F: FnMut(Vector3D) -> Color,
+    {
+        for row in 0..H {
+            for col in 0..W {
+                let view_x = col as f32 * (viewport.width / W as f32) - viewport.width / 2.0;
+                let view_y = -(row as f32 * (viewport.height / W as f32) - viewport.height / 2.0);
+                let color = f(Vector3D {
+                    x: view_x,
+                    y: view_y,
+                    z: viewport.center.z,
+                });
+                self.put_color(row, col, color);
+            }
+        }
     }
 
     fn write_to_file(&self, output_dir: impl AsRef<Path>) {
@@ -186,7 +145,7 @@ impl<const W: usize, const H: usize> Canvas<W, H> {
 
 fn main() {
     let camera = Camera {
-        origin: Point3D {
+        origin: Vector3D {
             x: 0.0,
             y: 0.0,
             z: 0.0,
@@ -198,9 +157,9 @@ fn main() {
         },
     };
     let viewport = Viewport {
-        width: VIEWPORT_WIDTH,
-        height: VIEWPORT_HEIGHT,
-        center: Point3D {
+        width: 1.0,
+        height: 1.0,
+        center: Vector3D {
             x: 0.0,
             y: 0.0,
             z: 1.0,
@@ -208,7 +167,7 @@ fn main() {
     };
     let scene = [
         Sphere {
-            center: Point3D {
+            center: Vector3D {
                 x: 0.0,
                 y: -1.0,
                 z: 3.0,
@@ -221,7 +180,7 @@ fn main() {
             },
         },
         Sphere {
-            center: Point3D {
+            center: Vector3D {
                 x: 2.0,
                 y: 0.0,
                 z: 4.0,
@@ -234,7 +193,7 @@ fn main() {
             },
         },
         Sphere {
-            center: Point3D {
+            center: Vector3D {
                 x: -2.0,
                 y: 0.0,
                 z: 4.0,
@@ -248,18 +207,13 @@ fn main() {
         },
     ];
 
-    let mut canvas = Canvas::<CANVAS_WIDTH, CANVAS_HEIGHT>::new();
-    viewport.map_points(|point| {
+    let mut canvas = Canvas::<SCREEN_WIDTH, SCREEN_HEIGHT>::new();
+    canvas.map_pixels(&viewport, |point| {
         let ray = Ray {
             origin: camera.origin,
-            dir: Vector3D {
-                x: point.x as f32,
-                y: point.y as f32,
-                z: point.z as f32,
-            },
+            dir: point,
         };
-        let color = trace_ray(ray, &scene);
-        canvas.put_color(point.x as i32, point.y as i32, color);
+        trace_ray(ray, &scene)
     });
 
     canvas.write_to_file("output.ppm");
