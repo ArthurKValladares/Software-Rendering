@@ -1,6 +1,7 @@
 use crate::{
     color::Color,
-    math::{dot, Vector3D},
+    light::{compute_lights, Light},
+    math::Vector3D,
     sphere::Sphere,
 };
 
@@ -17,9 +18,9 @@ pub fn sphere_ray_intersection(sphere: &Sphere, ray: &Ray) -> Option<(f32, f32)>
         z: ray.origin.z - sphere.center.z,
     };
 
-    let a = dot(ray.dir, ray.dir);
-    let b = 2.0 * dot(ray.dir, co);
-    let c = dot(co, co) - sphere.radius * sphere.radius;
+    let a = ray.dir.dot(ray.dir);
+    let b = 2.0 * ray.dir.dot(co);
+    let c = co.dot(co) - sphere.radius * sphere.radius;
 
     let discriminant = b * b - 4.0 * a * c;
 
@@ -33,11 +34,11 @@ pub fn sphere_ray_intersection(sphere: &Sphere, ray: &Ray) -> Option<(f32, f32)>
     }
 }
 
-pub fn trace_ray(ray: Ray, scene: &[Sphere]) -> Color {
+pub fn trace_ray(ray: Ray, scene: &[Sphere], ligths: &[Light]) -> Color {
     let background_color = Color {
-        red: 175,
-        green: 175,
-        blue: 175,
+        red: 0.8,
+        green: 0.8,
+        blue: 0.8,
     };
     let mut closest_t = None;
     let mut closest_sphere = None;
@@ -54,5 +55,10 @@ pub fn trace_ray(ray: Ray, scene: &[Sphere]) -> Color {
             None => {}
         };
     }
-    closest_sphere.map_or(background_color, |sphere| sphere.color)
+    closest_sphere.map_or(background_color, |sphere| {
+        let point = ray.origin + ray.dir * closest_t.unwrap();
+        let normal = (point - sphere.center).normalize();
+        let lights = compute_lights(point, normal, ligths);
+        sphere.color * lights
+    })
 }

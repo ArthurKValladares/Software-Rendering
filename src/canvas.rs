@@ -48,7 +48,10 @@ impl<const W: usize, const H: usize> Canvas<W, H> {
         for row in 0..H {
             for col in 0..W {
                 let color = self.colors[row][col];
-                writeln!(file, "{} {} {}", color.red, color.blue, color.green).unwrap();
+                let r = (color.red * 255.0).round() as u8;
+                let g = (color.green * 255.0).round() as u8;
+                let b = (color.blue * 255.0).round() as u8;
+                writeln!(file, "{} {} {}", r, g, b).unwrap();
             }
         }
     }
