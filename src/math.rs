@@ -90,3 +90,15 @@ impl std::ops::Div<f32> for Vector3D {
         }
     }
 }
+
+impl std::ops::Neg for Vector3D {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        Vector3D {
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
+        }
+    }
+}

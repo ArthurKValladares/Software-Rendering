@@ -58,7 +58,7 @@ pub fn trace_ray(ray: Ray, scene: &[Sphere], ligths: &[Light]) -> Color {
     closest_sphere.map_or(background_color, |sphere| {
         let point = ray.origin + ray.dir * closest_t.unwrap();
         let normal = (point - sphere.center).normalize();
-        let lights = compute_lights(point, normal, ligths);
+        let lights = compute_lights(point, normal, -ray.dir, sphere.specular, ligths);
         sphere.color * lights
     })
 }

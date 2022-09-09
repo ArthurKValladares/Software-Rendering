@@ -54,6 +54,7 @@ fn main() {
                 green: 0.0,
                 blue: 0.0,
             },
+            specular: Some(500.0),
         },
         Sphere {
             center: Vector3D {
@@ -67,6 +68,7 @@ fn main() {
                 green: 1.0,
                 blue: 0.0,
             },
+            specular: Some(1000.0),
         },
         Sphere {
             center: Vector3D {
@@ -80,6 +82,7 @@ fn main() {
                 green: 0.0,
                 blue: 1.0,
             },
+            specular: None,
         },
     ];
     let lights = [
